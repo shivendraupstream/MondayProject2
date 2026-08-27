@@ -1,22 +1,35 @@
 const express = require('express');
 const router = express.Router();
+const verifyMondayRequest = require('../middleware/verifyMondayRequest');
 
-// This is the "Execution URL" / "Run URL" — the route monday calls when the
-// actual workflow runs and the action needs to fire for real.
-// Its job: send the email through SendGrid, using the template + mapped values.
-
-router.post('/send-template-email', async (req, res) => {
+router.post('/send-template-email', verifyMondayRequest, async (req, res) => {
   try {
     const apiKey =
       req.body?.payload?.credentialsValues?.sendgrid_connection?.accessToken ||
-      req.body?.apiKey; // <-- testing shortcut
+      req.body?.apiKey;
 
-    const inputFields = req.body?.payload?.inputFields || req.body; // <-- testing shortcut
+    const inputFields = req.body?.payload?.inputFields || req.body;
 
     const recipientEmail = inputFields.recipientEmail;
     const templateId = inputFields.sendgrid_template || inputFields.templateId;
-    const mappingObject = inputFields.sendgrid_field_mapping || inputFields.mappingObject || {};
-    // <-- testing shortcut: lets you pass fromAddress directly in curl instead of using .env
+
+    let mappingObject = {};
+
+    if (inputFields.sendgrid_field_mapping && Object.keys(inputFields.sendgrid_field_mapping).length > 0) {
+      mappingObject = inputFields.sendgrid_field_mapping;
+    } else if (inputFields.templateVariablesJson) {
+      try {
+        mappingObject = JSON.parse(inputFields.templateVariablesJson);
+      } catch (err) {
+        return res.status(400).json({
+          error: 'Invalid JSON in Template Variables field',
+          detail: err.message
+        });
+      }
+    } else if (inputFields.mappingObject) {
+      mappingObject = inputFields.mappingObject;
+    }
+
     const fromAddress = inputFields.fromAddress || process.env.SENDGRID_FROM_ADDRESS;
 
     if (!apiKey) return res.status(400).json({ error: 'Missing SendGrid API key' });
@@ -24,22 +37,27 @@ router.post('/send-template-email', async (req, res) => {
     if (!templateId) return res.status(400).json({ error: 'Missing templateId' });
     if (!fromAddress) return res.status(400).json({ error: 'Missing fromAddress (must be a SendGrid-verified sender)' });
 
+    const sendGridPayload = {
+      template_id: templateId,
+      personalizations: [
+        {
+          to: [{ email: recipientEmail }],
+          dynamic_template_data: mappingObject
+        }
+      ],
+      from: { email: fromAddress }
+    };
+
+    console.log('*** EXACT PAYLOAD SENT TO SENDGRID:');
+    console.log(JSON.stringify(sendGridPayload, null, 2));
+
     const sgRes = await fetch('https://api.sendgrid.com/v3/mail/send', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        template_id: templateId,
-        personalizations: [
-          {
-            to: [{ email: recipientEmail }],
-            dynamic_template_data: mappingObject
-          }
-        ],
-        from: { email: fromAddress }
-      })
+      body: JSON.stringify(sendGridPayload)
     });
 
     if (!sgRes.ok) {
