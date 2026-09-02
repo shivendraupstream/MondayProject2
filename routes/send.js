@@ -60,12 +60,16 @@ router.post('/send-template-email', verifyMondayRequest, async (req, res) => {
       body: JSON.stringify(sendGridPayload)
     });
 
+    console.log('*** SENDGRID RESPONSE STATUS:', sgRes.status, sgRes.statusText);
+
     if (!sgRes.ok) {
       const errBody = await sgRes.text();
+      console.log('*** SENDGRID ERROR BODY:', errBody);
       return res.status(422).json({ error: 'SendGrid send failed', detail: errBody });
     }
 
     const messageId = sgRes.headers.get('x-message-id');
+    console.log('*** SENDGRID SUCCESS — message-id:', messageId);
 
     return res.status(200).json({
       outputFields: {
