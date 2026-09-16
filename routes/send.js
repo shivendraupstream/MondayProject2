@@ -8,7 +8,7 @@ const MONDAY_SIGNING_SECRET = process.env.MONDAY_SIGNING_SECRET;
 
 function signCallbackToken() {
   const token = jwt.sign({ appId: Number(MONDAY_APP_ID) }, MONDAY_SIGNING_SECRET);
-  console.log('*** CALLBACK JWT PAYLOAD:', JSON.stringify(jwt.decode(token)));
+  
   return token;
 }
 
@@ -22,9 +22,6 @@ async function reportSuccess(callbackUrl, outputFields) {
     body: JSON.stringify({ success: true, outputFields })
   });
   const text = await res.text();
-  console.log('*** CALLBACK RESPONSE STATUS:', res.status);
-  console.log('*** CALLBACK RESPONSE HEADERS:', JSON.stringify([...res.headers.entries()]));
-  console.log('*** CALLBACK RESPONSE BODY:', text);
 }
 
 async function reportFailure(callbackUrl, message) {
@@ -43,9 +40,6 @@ async function reportFailure(callbackUrl, message) {
     })
   });
   const text = await res.text();
-  console.log('*** CALLBACK RESPONSE STATUS:', res.status);
-  console.log('*** CALLBACK RESPONSE HEADERS:', JSON.stringify([...res.headers.entries()]));
-  console.log('*** CALLBACK RESPONSE BODY:', text);
 }
 
 router.post('/send-template-email', verifyMondayRequest, async (req, res) => {
@@ -102,8 +96,7 @@ router.post('/send-template-email', verifyMondayRequest, async (req, res) => {
     from: { email: fromAddress }
   };
 
-  console.log('*** EXACT PAYLOAD SENT TO SENDGRID:');
-  console.log(JSON.stringify(sendGridPayload, null, 2));
+ 
 
   try {
     const sgRes = await fetch('https://api.sendgrid.com/v3/mail/send', {
