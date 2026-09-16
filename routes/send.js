@@ -1,10 +1,47 @@
 const express = require('express');
+const jwt = require('jsonwebtoken');
 const router = express.Router();
 const verifyMondayRequest = require('../middleware/verifyMondayRequest');
+
+const MONDAY_APP_ID = process.env.MONDAY_APP_ID;
+const MONDAY_SIGNING_SECRET = process.env.MONDAY_SIGNING_SECRET;
+
+function signCallbackToken() {
+  return jwt.sign({ appId: MONDAY_APP_ID }, MONDAY_SIGNING_SECRET);
+}
+
+async function reportSuccess(callbackUrl, outputFields) {
+  await fetch(callbackUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: signCallbackToken()
+    },
+    body: JSON.stringify({ success: true, outputFields })
+  });
+}
+
+async function reportFailure(callbackUrl, message) {
+  await fetch(callbackUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: signCallbackToken()
+    },
+    body: JSON.stringify({
+      success: false,
+      severityCode: 4000,
+      runtimeErrorDescription: message,
+      notificationErrorTitle: 'SendGrid send failed',
+      notificationErrorDescription: message
+    })
+  });
+}
 
 router.post('/send-template-email', verifyMondayRequest, async (req, res) => {
   const payload = req.body?.payload || req.body;
   const callbackUrl = payload?.callbackUrl;
+  const actionUuid = req.body?.runtimeMetadata?.actionUuid;
 
   const apiKey =
     payload?.credentialsValues?.sendgrid_connection?.accessToken ||
@@ -16,7 +53,6 @@ router.post('/send-template-email', verifyMondayRequest, async (req, res) => {
   const templateId = inputFields.sendgrid_template || inputFields.templateId;
   const fromAddress = inputFields.fromAddress || process.env.SENDGRID_FROM_ADDRESS;
 
-  // Validate synchronously, before acking. Bad requests still fail fast and normally.
   if (!apiKey) return res.status(400).json({ error: 'Missing SendGrid API key' });
   if (!recipientEmail) return res.status(400).json({ error: 'Missing recipientEmail' });
   if (!templateId) return res.status(400).json({ error: 'Missing templateId' });
@@ -38,10 +74,13 @@ router.post('/send-template-email', verifyMondayRequest, async (req, res) => {
     mappingObject = inputFields.mappingObject;
   }
 
-  // 1. Ack the trigger immediately. This is what clears the "processing" state.
-  res.status(200).send();
+  // Ack the trigger immediately, matching monday's documented shape
+  res.status(200).json({
+    status: 'received',
+    message: 'Action has been triggered.',
+    actionUuid
+  });
 
-  // 2. Do the actual send after responding, then report the real result via callbackUrl.
   const sendGridPayload = {
     template_id: templateId,
     personalizations: [
@@ -71,17 +110,7 @@ router.post('/send-template-email', verifyMondayRequest, async (req, res) => {
     if (!sgRes.ok) {
       const errBody = await sgRes.text();
       console.log('*** SENDGRID ERROR BODY:', errBody);
-
-      if (callbackUrl) {
-        await fetch(callbackUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            severityCode: 4000,
-            message: `SendGrid send failed: ${errBody}`
-          })
-        });
-      }
+      if (callbackUrl) await reportFailure(callbackUrl, `SendGrid send failed: ${errBody}`);
       return;
     }
 
@@ -89,33 +118,17 @@ router.post('/send-template-email', verifyMondayRequest, async (req, res) => {
     console.log('*** SENDGRID SUCCESS message-id:', messageId);
 
     if (callbackUrl) {
-      await fetch(callbackUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          outputFields: {
-            success: true,
-            sentAt: new Date().toISOString(),
-            sendgridMessageId: messageId
-          }
-        })
+      await reportSuccess(callbackUrl, {
+        success: true,
+        sentAt: new Date().toISOString(),
+        sendgridMessageId: messageId
       });
     } else {
       console.warn('*** No callbackUrl present, could not report result to monday');
     }
   } catch (err) {
     console.error(err);
-
-    if (callbackUrl) {
-      await fetch(callbackUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          severityCode: 4000,
-          message: err.message
-        })
-      });
-    }
+    if (callbackUrl) await reportFailure(callbackUrl, err.message);
   }
 });
 
