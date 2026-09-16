@@ -7,7 +7,7 @@ const MONDAY_APP_ID = process.env.MONDAY_APP_ID;
 const MONDAY_SIGNING_SECRET = process.env.MONDAY_SIGNING_SECRET;
 
 function signCallbackToken() {
-  const token = jwt.sign({ appId: MONDAY_APP_ID }, MONDAY_SIGNING_SECRET);
+  const token = jwt.sign({ Number: MONDAY_APP_ID }, MONDAY_SIGNING_SECRET);
   console.log('*** CALLBACK JWT PAYLOAD:', JSON.stringify(jwt.decode(token)));
   return token;
 }
