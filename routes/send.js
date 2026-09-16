@@ -7,7 +7,9 @@ const MONDAY_APP_ID = process.env.MONDAY_APP_ID;
 const MONDAY_SIGNING_SECRET = process.env.MONDAY_SIGNING_SECRET;
 
 function signCallbackToken() {
-  return jwt.sign({ appId: MONDAY_APP_ID }, MONDAY_SIGNING_SECRET);
+  const token = jwt.sign({ appId: MONDAY_APP_ID }, MONDAY_SIGNING_SECRET);
+  console.log('*** CALLBACK JWT PAYLOAD:', JSON.stringify(jwt.decode(token)));
+  return token;
 }
 
 async function reportSuccess(callbackUrl, outputFields) {
@@ -21,6 +23,7 @@ async function reportSuccess(callbackUrl, outputFields) {
   });
   const text = await res.text();
   console.log('*** CALLBACK RESPONSE STATUS:', res.status);
+  console.log('*** CALLBACK RESPONSE HEADERS:', JSON.stringify([...res.headers.entries()]));
   console.log('*** CALLBACK RESPONSE BODY:', text);
 }
 
@@ -41,6 +44,7 @@ async function reportFailure(callbackUrl, message) {
   });
   const text = await res.text();
   console.log('*** CALLBACK RESPONSE STATUS:', res.status);
+  console.log('*** CALLBACK RESPONSE HEADERS:', JSON.stringify([...res.headers.entries()]));
   console.log('*** CALLBACK RESPONSE BODY:', text);
 }
 
