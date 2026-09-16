@@ -11,7 +11,7 @@ function signCallbackToken() {
 }
 
 async function reportSuccess(callbackUrl, outputFields) {
-  await fetch(callbackUrl, {
+  const res = await fetch(callbackUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -19,10 +19,13 @@ async function reportSuccess(callbackUrl, outputFields) {
     },
     body: JSON.stringify({ success: true, outputFields })
   });
+  const text = await res.text();
+  console.log('*** CALLBACK RESPONSE STATUS:', res.status);
+  console.log('*** CALLBACK RESPONSE BODY:', text);
 }
 
 async function reportFailure(callbackUrl, message) {
-  await fetch(callbackUrl, {
+  const res = await fetch(callbackUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -36,6 +39,9 @@ async function reportFailure(callbackUrl, message) {
       notificationErrorDescription: message
     })
   });
+  const text = await res.text();
+  console.log('*** CALLBACK RESPONSE STATUS:', res.status);
+  console.log('*** CALLBACK RESPONSE BODY:', text);
 }
 
 router.post('/send-template-email', verifyMondayRequest, async (req, res) => {
